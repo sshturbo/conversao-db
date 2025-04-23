@@ -29,12 +29,13 @@ type Usuario struct {
 	Valor    float64 `json:"valor"`
 	Bloqueio int     `json:"bloqueio"`
 	Msg      string  `json:"msg"`
-	DiaRev   string  `json:"dia_rev"`
-	Suspenso int     `json:"suspenso"`
-	Vencido  int     `json:"vencido"`
-	Fatura   int     `json:"fatura"`
-	Limite   int     `json:"limite"`
 	UUID     string  `json:"uuid"`
+	Status   int     `json:"status"`
+	Limite   int     `json:"limite"`
+	Suspenso int     `json:"suspenso"`
+	Periodo  int     `json:"periodo"`
+	Teste    int     `json:"teste"`
+	DiaRev   string  `json:"dia_rev"`
 }
 
 type Revenda struct {
@@ -342,12 +343,13 @@ func parseUsuario(fields []string) Usuario {
 	fmt.Sscanf(fields[7], "%f", &user.Valor)
 	fmt.Sscanf(fields[8], "%d", &user.Bloqueio)
 	user.Msg = fields[9]
-	user.DiaRev = fields[10]
-	fmt.Sscanf(fields[11], "%d", &user.Suspenso)
-	fmt.Sscanf(fields[12], "%d", &user.Vencido)
-	fmt.Sscanf(fields[13], "%d", &user.Fatura)
-	fmt.Sscanf(fields[14], "%d", &user.Limite)
-	user.UUID = fields[15]
+	user.UUID = fields[10]
+	fmt.Sscanf(fields[11], "%d", &user.Status)
+	fmt.Sscanf(fields[12], "%d", &user.Limite)
+	fmt.Sscanf(fields[13], "%d", &user.Suspenso)
+	fmt.Sscanf(fields[14], "%d", &user.Periodo)
+	fmt.Sscanf(fields[15], "%d", &user.Teste)
+	user.DiaRev = fields[16]
 	return user
 }
 

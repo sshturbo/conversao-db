@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"conversao-db/internal/conversao"
 
@@ -55,6 +56,7 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 
 	// Mapear logins para IDs para preencher byid corretamente
 	loginToID := map[string]int64{"admin": adminID}
+	loginToMainID := map[string]int64{"admin": 0}
 
 	// Inserir categorias
 	for _, cat := range dbExport.Categorias {
@@ -67,10 +69,13 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 	// Inserir revendas em accounts e atribuidos
 	for _, rev := range dbExport.Revendas {
 		byid := adminID // padrão: admin é o dono
+		mainid := int64(conversao.GerarMainID())
 		if donoID, ok := loginToID[rev.Dono]; ok {
 			byid = donoID
+			if donoMainID, ok2 := loginToMainID[rev.Dono]; ok2 {
+				mainid = donoMainID
+			}
 		}
-		mainid := int64(conversao.GerarMainID())
 		result, err := db.Exec(`INSERT INTO accounts (nome, contato, email, login, senha, recuperar_senha, byid, mainid, accesstoken, valorrevenda, valorusuario, nivel) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0, 0, 0, 2)`,
 			rev.Nome,
 			rev.Contato,
@@ -88,6 +93,7 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 			return fmt.Errorf("erro ao obter id da revenda %s: %v", rev.Login, err)
 		}
 		loginToID[rev.Login] = revendaID
+		loginToMainID[rev.Login] = mainid
 		_, err = db.Exec(`INSERT INTO atribuidos (valor, categoriaid, userid, byid, limite, limitetest, tipo, expira, subrev, suspenso) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 			rev.Valor,
 			rev.CategoriaID,
@@ -108,21 +114,49 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 	for _, user := range dbExport.Usuarios {
 		// Buscar o id do dono na tabela accounts
 		var donoID int64 = 0
+		var mainid int64 = int64(conversao.GerarMainID())
 		if id, ok := loginToID[user.Dono]; ok {
 			donoID = id
 		}
-		_, err := db.Exec(`INSERT INTO ssh_accounts (login, senha, nome, expira, categoriaid, limite, contato, uuid, nivel, byid, mainid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-			user.Login,
-			user.Senha,
-			user.Nome,
-			user.Expira,
-			user.CategoriaID,
-			user.Limite,
-			user.Contato,
-			user.UUID,
-			donoID,
-			donoID,
-		)
+		if mid, ok := loginToMainID[user.Dono]; ok {
+			mainid = mid
+		}
+		nome := user.Nome
+		if strings.TrimSpace(nome) == "" {
+			nome = user.Login
+		}
+		uuid := user.UUID
+		if strings.TrimSpace(uuid) == "" || uuid == "0" {
+			uuid = "NULL"
+		}
+		query := `INSERT INTO ssh_accounts (login, senha, nome, expira, categoriaid, limite, contato, uuid, nivel, byid, mainid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+		if uuid == "NULL" {
+			query = `INSERT INTO ssh_accounts (login, senha, nome, expira, categoriaid, limite, contato, uuid, nivel, byid, mainid) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?)`
+			_, err = db.Exec(query,
+				user.Login,
+				user.Senha,
+				nome,
+				user.Expira,
+				user.CategoriaID,
+				user.Limite,
+				user.Contato,
+				donoID,
+				mainid,
+			)
+		} else {
+			_, err = db.Exec(query,
+				user.Login,
+				user.Senha,
+				nome,
+				user.Expira,
+				user.CategoriaID,
+				user.Limite,
+				user.Contato,
+				uuid,
+				donoID,
+				mainid,
+			)
+		}
 		if err != nil {
 			return fmt.Errorf("erro ao inserir usuario %s em ssh_accounts: %v", user.Login, err)
 		}

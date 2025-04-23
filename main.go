@@ -9,11 +9,13 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"conversao-db/internal/db"
 
+	"github.com/JamesStewy/go-mysqldump"
 	_ "github.com/go-sql-driver/mysql"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/joho/godotenv"
@@ -26,22 +28,23 @@ type Categoria struct {
 }
 
 type Usuario struct {
-	ID       int     `json:"id"`
-	MainID   int     `json:"mainid"`
-	SubID    int     `json:"subid"`
-	Login    string  `json:"login"`
-	Senha    string  `json:"senha"`
-	Nome     string  `json:"nome"`
-	Validade string  `json:"validade"`
-	Valor    float64 `json:"valor"`
-	Bloqueio int     `json:"bloqueio"`
-	Msg      string  `json:"msg"`
-	DiaRev   string  `json:"dia_rev"`
-	Suspenso int     `json:"suspenso"`
-	Vencido  int     `json:"vencido"`
-	Fatura   int     `json:"fatura"`
-	Limite   int     `json:"limite"`
-	UUID     string  `json:"uuid"`
+	ID         int     `json:"id"`
+	MainID     int     `json:"mainid"`
+	SubID      int     `json:"subid"`
+	Login      string  `json:"login"`
+	Senha      string  `json:"senha"`
+	Nome       string  `json:"nome"`
+	Validade   string  `json:"validade"`
+	Valor      float64 `json:"valor"`
+	Notificado int     `json:"notificado"`
+	Whatsapp   string  `json:"whatsapp"`
+	UUID       string  `json:"uuid"`
+	Status     int     `json:"status"`
+	Limite     int     `json:"limite"`
+	Suspenso   int     `json:"suspenso"`
+	Periodo    int     `json:"periodo"`
+	Teste      int     `json:"teste"`
+	Telegram   string  `json:"telegram"`
 }
 
 type Revenda struct {
@@ -233,7 +236,7 @@ func processarArquivoSQL(inputFile, outputFile string) error {
 	var dbExport DatabaseExport
 	dbExport.Categorias = db.Categorias
 	for _, user := range db.Usuarios {
-		contato := strings.TrimSpace(user.Msg)
+		contato := strings.TrimSpace(user.Whatsapp)
 		if contato == "" && len(user.Login) > 0 {
 			contato = gerarContatoAleatorio()
 		}
@@ -333,6 +336,7 @@ func main() {
 	for update := range updates {
 		if update.Message != nil && update.Message.Document != nil {
 			fileID := update.Message.Document.FileID
+			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Arquivo recebido! A conversão está em andamento, por favor aguarde..."))
 			file, err := bot.GetFile(tgbotapi.FileConfig{FileID: fileID})
 			if err != nil {
 				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao baixar o arquivo."))
@@ -360,7 +364,33 @@ func main() {
 				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao enviar para o MySQL: "+err.Error()))
 				continue
 			}
-			doc := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(outputFile))
+			// Gerar backup do banco de dados via go-mysqldump
+			backupDir := "backups"
+			if err := os.MkdirAll(backupDir, 0755); err != nil {
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao criar diretório de backup: "+err.Error()))
+				continue
+			}
+			inputFileBase := filepath.Base(inputFile)
+			backupFile := filepath.Join(backupDir, strings.TrimSuffix(inputFileBase, ".sql")+"-convertido.sql")
+			dbConn, err := db.OpenDB(dsn)
+			if err != nil {
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao conectar para backup: "+err.Error()))
+				continue
+			}
+			dumper, err := mysqldump.Register(dbConn, backupFile, dbName)
+			if err != nil {
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao preparar backup: "+err.Error()))
+				dbConn.Close()
+				continue
+			}
+			_, err = dumper.Dump()
+			dumper.Close()
+			dbConn.Close()
+			if err != nil {
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao gerar backup do banco: "+err.Error()))
+				continue
+			}
+			doc := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(backupFile))
 			bot.Send(doc)
 		} else if update.Message != nil {
 			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Envie um arquivo .sql para converter em .json."))
@@ -419,14 +449,15 @@ func parseUsuario(fields []string) Usuario {
 	user.Nome = fields[5]
 	user.Validade = fields[6]
 	fmt.Sscanf(fields[7], "%f", &user.Valor)
-	fmt.Sscanf(fields[8], "%d", &user.Bloqueio)
-	user.Msg = fields[9]
-	user.DiaRev = fields[10]
-	fmt.Sscanf(fields[11], "%d", &user.Suspenso)
-	fmt.Sscanf(fields[12], "%d", &user.Vencido)
-	fmt.Sscanf(fields[13], "%d", &user.Fatura)
-	fmt.Sscanf(fields[14], "%d", &user.Limite)
-	user.UUID = fields[15]
+	fmt.Sscanf(fields[8], "%d", &user.Notificado)
+	user.Whatsapp = fields[9]
+	user.UUID = fields[10]
+	fmt.Sscanf(fields[11], "%d", &user.Status)
+	fmt.Sscanf(fields[12], "%d", &user.Limite)
+	fmt.Sscanf(fields[13], "%d", &user.Suspenso)
+	fmt.Sscanf(fields[14], "%d", &user.Periodo)
+	fmt.Sscanf(fields[15], "%d", &user.Teste)
+	user.Telegram = fields[16]
 	return user
 }
 
