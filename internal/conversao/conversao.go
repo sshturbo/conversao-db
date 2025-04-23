@@ -1,22 +1,15 @@
-package main
+package conversao
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"strings"
 	"time"
-
-	"conversao-db/internal/db"
-
-	_ "github.com/go-sql-driver/mysql"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/joho/godotenv"
 )
 
 type Categoria struct {
@@ -67,14 +60,11 @@ type Revenda struct {
 	V2RayTeste int     `json:"v2ray_teste"`
 }
 
-// Estrutura que conterá todas as tabelas
 type Database struct {
 	Categorias []Categoria `json:"categorias"`
 	Usuarios   []Usuario   `json:"usuarios"`
 	Revendas   []Revenda   `json:"revendas"`
 }
-
-// Estruturas auxiliares para exportação com campos extras
 
 type UsuarioExport struct {
 	Login         string `json:"login"`
@@ -113,7 +103,7 @@ type DatabaseExport struct {
 }
 
 // Função para baixar arquivo de uma URL
-func downloadFile(url string, filepath string) error {
+func DownloadFile(url string, filepath string) error {
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -131,7 +121,7 @@ func downloadFile(url string, filepath string) error {
 }
 
 // Função principal de processamento do SQL para JSON
-func processarArquivoSQL(inputFile, outputFile string) error {
+func ProcessarArquivoSQL(inputFile, outputFile string) error {
 	file, err := os.Open(inputFile)
 	if err != nil {
 		return fmt.Errorf("erro ao abrir arquivo: %v", err)
@@ -299,75 +289,6 @@ func processarArquivoSQL(inputFile, outputFile string) error {
 	return nil
 }
 
-func main() {
-	// Carregar variáveis do .env
-	_ = godotenv.Load()
-
-	telegramToken := os.Getenv("TELEGRAM_TOKEN")
-	if telegramToken == "" {
-		log.Fatal("TELEGRAM_TOKEN não definido no .env")
-	}
-
-	bot, err := tgbotapi.NewBotAPI(telegramToken)
-	if err != nil {
-		log.Panic(err)
-	}
-	bot.Debug = false
-	log.Printf("Bot autorizado em %s", bot.Self.UserName)
-
-	dbUser := os.Getenv("DB_USER")
-	dbPass := os.Getenv("DB_PASS")
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbName := os.Getenv("DB_NAME")
-	if dbUser == "" || dbPass == "" || dbHost == "" || dbPort == "" || dbName == "" {
-		log.Fatal("Dados de conexão do banco não definidos no .env")
-	}
-	dsn := dbUser + ":" + dbPass + "@tcp(" + dbHost + ":" + dbPort + ")/" + dbName + "?charset=utf8mb4&parseTime=True&loc=Local"
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates := bot.GetUpdatesChan(u)
-
-	for update := range updates {
-		if update.Message != nil && update.Message.Document != nil {
-			fileID := update.Message.Document.FileID
-			file, err := bot.GetFile(tgbotapi.FileConfig{FileID: fileID})
-			if err != nil {
-				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao baixar o arquivo."))
-				continue
-			}
-			downloadURL := file.Link(bot.Token)
-			inputFile := update.Message.Document.FileName
-			if !strings.HasSuffix(inputFile, ".sql") {
-				inputFile = "entrada.sql"
-			}
-			outputFile := strings.TrimSuffix(inputFile, ".sql") + ".json"
-			err = downloadFile(downloadURL, inputFile)
-			if err != nil {
-				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao salvar o arquivo."))
-				continue
-			}
-			err = processarArquivoSQL(inputFile, outputFile)
-			if err != nil {
-				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao processar o arquivo: "+err.Error()))
-				continue
-			}
-			// Enviar para MySQL após gerar o JSON
-			err = db.EnviarParaMySQL(outputFile, dsn)
-			if err != nil {
-				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao enviar para o MySQL: "+err.Error()))
-				continue
-			}
-			doc := tgbotapi.NewDocument(update.Message.Chat.ID, tgbotapi.FilePath(outputFile))
-			bot.Send(doc)
-		} else if update.Message != nil {
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Envie um arquivo .sql para converter em .json."))
-		}
-	}
-}
-
 func splitFields(row string) []string {
 	var fields []string
 	var field string
@@ -492,4 +413,8 @@ func gerarContatoAleatorio() string {
 	ddd := rand.Intn(90) + 10
 	numero := rand.Intn(900000000) + 100000000
 	return fmt.Sprintf("55%d9%d", ddd, numero)
+}
+
+func GerarMainID() int {
+	return rand.Intn(900000) + 100000 // Gera número aleatório de 6 dígitos
 }
