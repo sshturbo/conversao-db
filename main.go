@@ -372,12 +372,17 @@ func main() {
 			}
 			inputFileBase := filepath.Base(inputFile)
 			backupFile := filepath.Join(backupDir, strings.TrimSuffix(inputFileBase, ".sql")+"-convertido.sql")
+			absBackupFile, err := filepath.Abs(backupFile)
+			if err != nil {
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao obter caminho absoluto do backup: "+err.Error()))
+				continue
+			}
 			dbConn, err := db.OpenDB(dsn)
 			if err != nil {
 				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao conectar para backup: "+err.Error()))
 				continue
 			}
-			dumper, err := mysqldump.Register(dbConn, backupFile, dbName)
+			dumper, err := mysqldump.Register(dbConn, absBackupFile, dbName)
 			if err != nil {
 				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao preparar backup: "+err.Error()))
 				dbConn.Close()

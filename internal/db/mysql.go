@@ -68,14 +68,8 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 
 	// Inserir revendas em accounts e atribuidos
 	for _, rev := range dbExport.Revendas {
-		byid := adminID // padrão: admin é o dono
-		mainid := int64(conversao.GerarMainID())
-		if donoID, ok := loginToID[rev.Dono]; ok {
-			byid = donoID
-			if donoMainID, ok2 := loginToMainID[rev.Dono]; ok2 {
-				mainid = donoMainID
-			}
-		}
+		byid := adminID                          // padrão: admin é o dono
+		mainid := int64(conversao.GerarMainID()) // Sempre gera um novo hash para cada revenda
 		result, err := db.Exec(`INSERT INTO accounts (nome, contato, email, login, senha, recuperar_senha, byid, mainid, accesstoken, valorrevenda, valorusuario, nivel) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0, 0, 0, 2)`,
 			rev.Nome,
 			rev.Contato,
@@ -93,7 +87,7 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 			return fmt.Errorf("erro ao obter id da revenda %s: %v", rev.Login, err)
 		}
 		loginToID[rev.Login] = revendaID
-		loginToMainID[rev.Login] = mainid
+		loginToMainID[rev.Login] = mainid // Salva o mainid único da revenda para herança dos usuários
 		_, err = db.Exec(`INSERT INTO atribuidos (valor, categoriaid, userid, byid, limite, limitetest, tipo, expira, subrev, suspenso) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 			rev.Valor,
 			rev.CategoriaID,
@@ -114,12 +108,14 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 	for _, user := range dbExport.Usuarios {
 		// Buscar o id do dono na tabela accounts
 		var donoID int64 = 0
-		var mainid int64 = int64(conversao.GerarMainID())
+		var mainid int64 = 0
 		if id, ok := loginToID[user.Dono]; ok {
 			donoID = id
 		}
 		if mid, ok := loginToMainID[user.Dono]; ok {
-			mainid = mid
+			mainid = mid // herda o mainid da revenda
+		} else {
+			mainid = int64(conversao.GerarMainID()) // fallback se não encontrar dono
 		}
 		nome := user.Nome
 		if strings.TrimSpace(nome) == "" {
