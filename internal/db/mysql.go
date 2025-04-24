@@ -163,7 +163,10 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 
 	// Inserir categorias
 	for _, cat := range dbExport.Categorias {
-		_, err := db.Exec(`INSERT INTO categorias (subid, nome) VALUES (?, ?)`, cat.SubID, cat.Nome)
+		_, err := db.Exec(`INSERT INTO categorias (subid, nome) VALUES (?, ?)`,
+			cat.SubID,
+			strings.TrimSpace(cat.Nome),
+		)
 		if err != nil {
 			return fmt.Errorf("erro ao inserir categoria %s: %v", cat.Nome, err)
 		}
@@ -171,7 +174,6 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 
 	// Inserir revendas em accounts e atribuidos
 	for _, rev := range dbExport.Revendas {
-		// Buscar o dono pelo login usando o rev.Dono que já foi processado
 		byid := adminID // valor padrão
 		if rev.Dono != "admin" && rev.Dono != "desconhecido" {
 			if donoID, ok := loginToID[rev.Dono]; ok {
@@ -182,11 +184,11 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 		mainid := int64(conversao.GerarMainID()) // Sempre gera um novo hash para cada revenda
 
 		result, err := db.Exec(`INSERT INTO accounts (nome, contato, email, login, senha, recuperar_senha, byid, mainid, accesstoken, valorrevenda, valorusuario, nivel) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0, 0, 0, 2)`,
-			rev.Nome,
-			rev.Contato,
-			rev.Email,
-			rev.Login,
-			rev.Senha,
+			strings.TrimSpace(rev.Nome),
+			strings.TrimSpace(rev.Contato),
+			strings.TrimSpace(rev.Email),
+			strings.TrimSpace(rev.Login),
+			strings.TrimSpace(rev.Senha),
 			byid,
 			mainid,
 		)
@@ -207,8 +209,8 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 			byid,
 			rev.Limite,
 			rev.Limite,
-			strings.Title(strings.TrimSpace(strings.ToLower(rev.Tipo))), // Remove espaços e garante primeira letra maiúscula
-			rev.Expira,
+			strings.TrimSpace(strings.Title(strings.ToLower(rev.Tipo))), // Remove espaços e garante primeira letra maiúscula
+			strings.TrimSpace(rev.Expira),
 			rev.Sub,
 		)
 		if err != nil {
@@ -218,25 +220,24 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 
 	// Inserir usuários em ssh_accounts
 	for _, user := range dbExport.Usuarios {
-		// Buscar o id do dono na tabela accounts
 		var donoID int64 = 0
 		var mainid int64 = 0
-		if id, ok := loginToID[user.Dono]; ok {
+		if id, ok := loginToID[strings.TrimSpace(user.Dono)]; ok {
 			donoID = id
 		}
-		if mid, ok := loginToMainID[user.Dono]; ok {
+		if mid, ok := loginToMainID[strings.TrimSpace(user.Dono)]; ok {
 			mainid = mid // herda o mainid da revenda
 		} else {
 			mainid = int64(conversao.GerarMainID()) // fallback se não encontrar dono
 		}
 
-		nome := user.Nome
-		if strings.TrimSpace(nome) == "" {
-			nome = user.Login
+		nome := strings.TrimSpace(user.Nome)
+		if nome == "" {
+			nome = strings.TrimSpace(user.Login)
 		}
 
-		uuid := user.UUID
-		if strings.TrimSpace(uuid) == "" || uuid == "0" {
+		uuid := strings.TrimSpace(user.UUID)
+		if uuid == "" || uuid == "0" {
 			uuid = "NULL"
 		}
 
@@ -244,25 +245,25 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 		if uuid == "NULL" {
 			query = `INSERT INTO ssh_accounts (login, senha, nome, expira, categoriaid, limite, contato, uuid, nivel, byid, mainid) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?)`
 			_, err = db.Exec(query,
-				user.Login,
-				user.Senha,
+				strings.TrimSpace(user.Login),
+				strings.TrimSpace(user.Senha),
 				nome,
-				user.Expira,
+				strings.TrimSpace(user.Expira),
 				user.CategoriaID,
 				user.Limite,
-				user.Contato,
+				strings.TrimSpace(user.Contato),
 				donoID,
 				mainid,
 			)
 		} else {
 			_, err = db.Exec(query,
-				user.Login,
-				user.Senha,
+				strings.TrimSpace(user.Login),
+				strings.TrimSpace(user.Senha),
 				nome,
-				user.Expira,
+				strings.TrimSpace(user.Expira),
 				user.CategoriaID,
 				user.Limite,
-				user.Contato,
+				strings.TrimSpace(user.Contato),
 				uuid,
 				donoID,
 				mainid,

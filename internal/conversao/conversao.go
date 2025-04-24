@@ -329,7 +329,7 @@ func parseCategoria(fields []string) Categoria {
 	var cat Categoria
 	fmt.Sscanf(fields[0], "%d", &cat.ID)
 	fmt.Sscanf(fields[1], "%d", &cat.SubID)
-	cat.Nome = fields[2]
+	cat.Nome = strings.TrimSpace(fields[2])
 	return cat
 }
 
@@ -341,20 +341,20 @@ func parseUsuario(fields []string) Usuario {
 	fmt.Sscanf(fields[0], "%d", &user.ID)
 	fmt.Sscanf(fields[1], "%d", &user.MainID)
 	fmt.Sscanf(fields[2], "%d", &user.SubID)
-	user.Login = fields[3]
-	user.Senha = fields[4]
-	user.Nome = fields[5]
-	user.Validade = fields[6]
+	user.Login = strings.TrimSpace(fields[3])
+	user.Senha = strings.TrimSpace(fields[4])
+	user.Nome = strings.TrimSpace(fields[5])
+	user.Validade = strings.TrimSpace(fields[6])
 	fmt.Sscanf(fields[7], "%f", &user.Valor)
 	fmt.Sscanf(fields[8], "%d", &user.Bloqueio)
-	user.Msg = fields[9]
-	user.UUID = fields[10]
+	user.Msg = strings.TrimSpace(fields[9])
+	user.UUID = strings.TrimSpace(fields[10])
 	fmt.Sscanf(fields[11], "%d", &user.Status)
 	fmt.Sscanf(fields[12], "%d", &user.Limite)
 	fmt.Sscanf(fields[13], "%d", &user.Suspenso)
 	fmt.Sscanf(fields[14], "%d", &user.Periodo)
 	fmt.Sscanf(fields[15], "%d", &user.Teste)
-	user.DiaRev = fields[16]
+	user.DiaRev = strings.TrimSpace(fields[16])
 	return user
 }
 
@@ -362,22 +362,22 @@ func parseRevenda(fields []string) Revenda {
 	var rev Revenda
 	fmt.Sscanf(fields[0], "%d", &rev.ID)
 	fmt.Sscanf(fields[1], "%d", &rev.MainID)
-	rev.Login = fields[2]
-	rev.Senha = fields[3]
-	rev.Numero = fields[4]
+	rev.Login = strings.TrimSpace(fields[2])
+	rev.Senha = strings.TrimSpace(fields[3])
+	rev.Numero = strings.TrimSpace(fields[4])
 	fmt.Sscanf(fields[5], "%f", &rev.Valor)
 	fmt.Sscanf(fields[6], "%d", &rev.Limite)
-	rev.Modo = fields[7]
-	rev.Data = fields[8]
+	rev.Modo = strings.TrimSpace(fields[7])
+	rev.Data = strings.TrimSpace(fields[8])
 	fmt.Sscanf(fields[9], "%d", &rev.LimiteUse)
 	fmt.Sscanf(fields[10], "%d", &rev.Categoria)
 	fmt.Sscanf(fields[11], "%d", &rev.Sub)
 	fmt.Sscanf(fields[12], "%d", &rev.Expirado)
-	rev.TextoRev = fields[13]
-	rev.TextoUser = fields[14]
-	rev.APIKey = fields[15]
+	rev.TextoRev = strings.TrimSpace(fields[13])
+	rev.TextoUser = strings.TrimSpace(fields[14])
+	rev.APIKey = strings.TrimSpace(fields[15])
 	fmt.Sscanf(fields[16], "%d", &rev.Notificado)
-	rev.TextoTeste = fields[17]
+	rev.TextoTeste = strings.TrimSpace(fields[17])
 	fmt.Sscanf(fields[18], "%f", &rev.ValorTeste)
 	fmt.Sscanf(fields[19], "%d", &rev.V2RayTeste)
 	return rev
