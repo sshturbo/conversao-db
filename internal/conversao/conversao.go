@@ -2,7 +2,6 @@ package conversao
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -121,11 +120,11 @@ func DownloadFile(url string, filepath string) error {
 	return err
 }
 
-// Função principal de processamento do SQL para JSON
-func ProcessarArquivoSQL(inputFile, outputFile string) error {
+// ProcessarArquivoSQL processa o arquivo SQL e retorna a estrutura de dados
+func ProcessarArquivoSQL(inputFile string) (*DatabaseExport, error) {
 	file, err := os.Open(inputFile)
 	if err != nil {
-		return fmt.Errorf("erro ao abrir arquivo: %v", err)
+		return nil, fmt.Errorf("erro ao abrir arquivo: %v", err)
 	}
 	defer file.Close()
 
@@ -273,21 +272,7 @@ func ProcessarArquivoSQL(inputFile, outputFile string) error {
 		})
 	}
 
-	jsonData, err := json.MarshalIndent(dbExport, "", "    ")
-	if err != nil {
-		return fmt.Errorf("erro ao converter para JSON: %v", err)
-	}
-
-	outFile, err := os.Create(outputFile)
-	if err != nil {
-		return fmt.Errorf("erro ao criar arquivo JSON: %v", err)
-	}
-	defer outFile.Close()
-	_, err = outFile.Write(jsonData)
-	if err != nil {
-		return fmt.Errorf("erro ao salvar arquivo JSON: %v", err)
-	}
-	return nil
+	return &dbExport, nil
 }
 
 func splitFields(row string) []string {

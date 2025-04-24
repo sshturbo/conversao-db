@@ -2,9 +2,7 @@ package db
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	"conversao-db/internal/conversao"
@@ -24,20 +22,8 @@ func OpenDB(dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
-// EnviarParaMySQL insere os dados do JSON no banco de dados
-func EnviarParaMySQL(jsonFile string, dsn string) error {
-	file, err := os.Open(jsonFile)
-	if err != nil {
-		return fmt.Errorf("erro ao abrir arquivo JSON: %v", err)
-	}
-	defer file.Close()
-
-	var dbExport conversao.DatabaseExport
-	dec := json.NewDecoder(file)
-	if err := dec.Decode(&dbExport); err != nil {
-		return fmt.Errorf("erro ao decodificar JSON: %v", err)
-	}
-
+// EnviarParaMySQL insere os dados diretamente no banco de dados
+func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 	db, err := OpenDB(dsn)
 	if err != nil {
 		return fmt.Errorf("erro ao conectar ao MySQL: %v", err)
@@ -70,6 +56,7 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 	for _, rev := range dbExport.Revendas {
 		byid := adminID                          // padrão: admin é o dono
 		mainid := int64(conversao.GerarMainID()) // Sempre gera um novo hash para cada revenda
+
 		result, err := db.Exec(`INSERT INTO accounts (nome, contato, email, login, senha, recuperar_senha, byid, mainid, accesstoken, valorrevenda, valorusuario, nivel) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0, 0, 0, 2)`,
 			rev.Nome,
 			rev.Contato,
@@ -88,6 +75,7 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 		}
 		loginToID[rev.Login] = revendaID
 		loginToMainID[rev.Login] = mainid // Salva o mainid único da revenda para herança dos usuários
+
 		_, err = db.Exec(`INSERT INTO atribuidos (valor, categoriaid, userid, byid, limite, limitetest, tipo, expira, subrev, suspenso) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 			rev.Valor,
 			rev.CategoriaID,
@@ -117,14 +105,17 @@ func EnviarParaMySQL(jsonFile string, dsn string) error {
 		} else {
 			mainid = int64(conversao.GerarMainID()) // fallback se não encontrar dono
 		}
+
 		nome := user.Nome
 		if strings.TrimSpace(nome) == "" {
 			nome = user.Login
 		}
+
 		uuid := user.UUID
 		if strings.TrimSpace(uuid) == "" || uuid == "0" {
 			uuid = "NULL"
 		}
+
 		query := `INSERT INTO ssh_accounts (login, senha, nome, expira, categoriaid, limite, contato, uuid, nivel, byid, mainid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
 		if uuid == "NULL" {
 			query = `INSERT INTO ssh_accounts (login, senha, nome, expira, categoriaid, limite, contato, uuid, nivel, byid, mainid) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?)`
