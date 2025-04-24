@@ -191,7 +191,7 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 			return fmt.Errorf("erro ao obter id da revenda %s: %v", rev.Login, err)
 		}
 		loginToID[rev.Login] = revendaID
-		loginToMainID[rev.Login] = mainid // Salva o mainid único da revenda para herança dos usuários
+		loginToMainID[rev.Login] = mainid
 
 		_, err = db.Exec(`INSERT INTO atribuidos (valor, categoriaid, userid, byid, limite, limitetest, tipo, expira, subrev, suspenso) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 			rev.Valor,
@@ -200,7 +200,7 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 			byid,
 			rev.Limite,
 			rev.Limite,
-			rev.Tipo,
+			strings.Title(strings.ToLower(rev.Tipo)), // Garante primeira letra maiúscula
 			rev.Expira,
 			rev.Sub,
 		)

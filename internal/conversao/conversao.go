@@ -86,7 +86,7 @@ type RevendaExport struct {
 	Contato       string  `json:"contato"`
 	Valor         float64 `json:"valor"`
 	Limite        int     `json:"limite"`
-	Tipo          string  `json:"tipo"`
+	Tipo          string  `json:"tipo"` // campo ajustado
 	Expira        string  `json:"expira"`
 	CategoriaID   int     `json:"categoriaid"`
 	Sub           int     `json:"sub"`
@@ -227,10 +227,21 @@ func ProcessarArquivoSQL(inputFile string) (*DatabaseExport, error) {
 		if contato == "" && len(user.Login) > 0 {
 			contato = gerarContatoAleatorio()
 		}
+
+		// Tratar data de expiração vazia
 		expira := user.Validade
-		if t, err := time.Parse("2006-01-02 15:04:05", user.Validade); err == nil {
-			expira = t.Format("2006-01-02T15:04:05")
+		if strings.TrimSpace(expira) == "" {
+			// Define data de expiração como a data atual
+			expira = time.Now().Format("2006-01-02 15:04:05")
+		} else if t, err := time.Parse("2006-01-02 15:04:05", user.Validade); err == nil {
+			expira = t.Format("2006-01-02 15:04:05")
+		} else if t, err := time.Parse("2006-01-02", user.Validade); err == nil {
+			expira = t.Format("2006-01-02 15:04:05")
+		} else {
+			// Se não conseguir parsear a data, usa a data atual
+			expira = time.Now().Format("2006-01-02 15:04:05")
 		}
+
 		dbExport.Usuarios = append(dbExport.Usuarios, UsuarioExport{
 			Login:         user.Login,
 			Senha:         user.Senha,
@@ -255,13 +266,22 @@ func ProcessarArquivoSQL(inputFile string) (*DatabaseExport, error) {
 			contato = gerarContatoAleatorio()
 		}
 		email := strings.TrimSpace(rev.Login) + "@gmail.com"
+
+		// Garantir que o tipo comece com letra maiúscula
+		modo := rev.Modo
+		if strings.ToLower(modo) == "validade" {
+			modo = "Validade"
+		} else if strings.ToLower(modo) == "credito" {
+			modo = "Credito"
+		}
+
 		dbExport.Revendas = append(dbExport.Revendas, RevendaExport{
 			Login:         rev.Login,
 			Senha:         rev.Senha,
 			Contato:       contato,
 			Valor:         rev.Valor,
 			Limite:        rev.Limite,
-			Tipo:          rev.Modo,
+			Tipo:          modo,
 			Expira:        dataFormatada,
 			CategoriaID:   rev.Categoria,
 			Sub:           rev.Sub,
