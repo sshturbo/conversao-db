@@ -22,13 +22,130 @@ func OpenDB(dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
+// LimparTabelas remove todos os registros das tabelas
+func LimparTabelas(db *sql.DB) error {
+	// Desabilitar verificação de chave estrangeira temporariamente
+	_, err := db.Exec("SET FOREIGN_KEY_CHECKS = 0")
+	if err != nil {
+		return fmt.Errorf("erro ao desabilitar foreign key checks: %v", err)
+	}
+
+	// Lista de tabelas para limpar
+	tabelas := []string{"ssh_accounts", "atribuidos", "accounts", "categorias"}
+
+	// Limpar cada tabela
+	for _, tabela := range tabelas {
+		_, err := db.Exec(fmt.Sprintf("TRUNCATE TABLE %s", tabela))
+		if err != nil {
+			return fmt.Errorf("erro ao limpar tabela %s: %v", tabela, err)
+		}
+	}
+
+	// Reabilitar verificação de chave estrangeira
+	_, err = db.Exec("SET FOREIGN_KEY_CHECKS = 1")
+	if err != nil {
+		return fmt.Errorf("erro ao reabilitar foreign key checks: %v", err)
+	}
+
+	return nil
+}
+
 // EnviarParaMySQL insere os dados diretamente no banco de dados
 func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
-	db, err := OpenDB(dsn)
+	// Primeiro conectar sem especificar o banco para poder criá-lo
+	dsnBase := strings.Split(dsn, "/")[0] + "/"
+	db, err := OpenDB(dsnBase)
 	if err != nil {
 		return fmt.Errorf("erro ao conectar ao MySQL: %v", err)
 	}
+
+	// Extrair nome do banco da DSN
+	dbName := strings.Split(strings.Split(dsn, "/")[1], "?")[0]
+
+	// Criar o banco de dados com collation compatível
+	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci", dbName))
+	if err != nil {
+		db.Close()
+		return fmt.Errorf("erro ao criar banco de dados: %v", err)
+	}
+	db.Close()
+
+	// Agora conectar ao banco específico
+	db, err = OpenDB(dsn)
+	if err != nil {
+		return fmt.Errorf("erro ao conectar ao banco %s: %v", dbName, err)
+	}
 	defer db.Close()
+
+	// Limpar tabelas existentes antes de inserir novos dados
+	err = LimparTabelas(db)
+	if err != nil {
+		return fmt.Errorf("erro ao limpar tabelas: %v", err)
+	}
+
+	// Criar tabelas necessárias
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS accounts (
+		id INT PRIMARY KEY AUTO_INCREMENT,
+		nome VARCHAR(255),
+		contato VARCHAR(255),
+		email VARCHAR(255),
+		login VARCHAR(255),
+		senha VARCHAR(255),
+		recuperar_senha VARCHAR(255),
+		byid INT,
+		mainid INT,
+		accesstoken INT,
+		valorrevenda DECIMAL(10,2),
+		valorusuario DECIMAL(10,2),
+		nivel INT
+	) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+	if err != nil {
+		return fmt.Errorf("erro ao criar tabela accounts: %v", err)
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS categorias (
+		id INT PRIMARY KEY AUTO_INCREMENT,
+		subid INT,
+		nome VARCHAR(255)
+	) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+	if err != nil {
+		return fmt.Errorf("erro ao criar tabela categorias: %v", err)
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS ssh_accounts (
+		id INT PRIMARY KEY AUTO_INCREMENT,
+		login VARCHAR(255),
+		senha VARCHAR(255),
+		nome VARCHAR(255),
+		expira DATETIME,
+		categoriaid INT,
+		limite INT,
+		contato VARCHAR(255),
+		uuid VARCHAR(255),
+		nivel INT,
+		byid INT,
+		mainid INT
+	) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+	if err != nil {
+		return fmt.Errorf("erro ao criar tabela ssh_accounts: %v", err)
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS atribuidos (
+		id INT PRIMARY KEY AUTO_INCREMENT,
+		valor DECIMAL(10,2),
+		categoriaid INT,
+		userid INT,
+		byid INT,
+		limite INT,
+		limitetest INT,
+		tipo VARCHAR(255),
+		expira DATETIME,
+		subrev INT,
+		suspenso INT
+	) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+	if err != nil {
+		return fmt.Errorf("erro ao criar tabela atribuidos: %v", err)
+	}
 
 	// Inserir admin
 	result, err := db.Exec(`INSERT INTO accounts (nome, contato, email, login, senha, recuperar_senha, byid, mainid, accesstoken, valorrevenda, valorusuario, nivel) VALUES ('Admin', '62999999999', 'admin@admin.com', 'admin', 'admin', NULL, 0, 0, 0, 0.00, 0.00, 3)`)

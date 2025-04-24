@@ -91,7 +91,7 @@ func main() {
 	if dbUser == "" || dbPass == "" || dbHost == "" || dbPort == "" || dbName == "" {
 		log.Fatal("Dados de conexão do banco não definidos no .env")
 	}
-	dsn := dbUser + ":" + dbPass + "@tcp(" + dbHost + ":" + dbPort + ")/" + dbName + "?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := dbUser + ":" + dbPass + "@tcp(" + dbHost + ":" + dbPort + ")/" + dbName + "?charset=utf8mb4&collation=utf8mb4_unicode_ci&parseTime=True&loc=Local"
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -151,6 +151,9 @@ func main() {
 				"--protocol=tcp",
 				"--user="+dbUser,
 				"--password="+dbPass,
+				"--default-character-set=utf8mb4",
+				"--set-charset=utf8mb4",
+				"--skip-set-charset",
 				"--databases", dbName,
 				"--result-file="+backupFile,
 				"--single-transaction",
@@ -187,10 +190,33 @@ func main() {
 			// Confirma o envio
 			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Backup enviado com sucesso!"))
 
+			// Remove o arquivo de backup local após envio bem sucedido
+			err = os.Remove(backupFile)
+			if err != nil {
+				errMsg := fmt.Sprintf("Aviso: não foi possível remover o arquivo de backup local: %v", err)
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, errMsg))
+			}
+
+			// Limpar as tabelas para deixar o banco pronto para a próxima importação
+			dbConn, err := db.OpenDB(dsn)
+			if err != nil {
+				errMsg := fmt.Sprintf("Erro ao conectar ao banco para limpeza: %v", err)
+				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, errMsg))
+			} else {
+				err = db.LimparTabelas(dbConn)
+				if err != nil {
+					errMsg := fmt.Sprintf("Erro ao limpar tabelas: %v", err)
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, errMsg))
+				} else {
+					bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Tabelas limpas com sucesso! Banco pronto para próxima importação."))
+				}
+				dbConn.Close()
+			}
+
 			// Remove o arquivo SQL original após processamento
 			os.Remove(inputFile)
 		} else if update.Message != nil {
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Envie um arquivo .sql para converter em .json."))
+			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Envie um arquivo .sql para conversão."))
 		}
 	}
 }
