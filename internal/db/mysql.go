@@ -200,7 +200,7 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 			byid,
 			rev.Limite,
 			rev.Limite,
-			strings.Title(strings.ToLower(rev.Tipo)), // Garante primeira letra maiúscula
+			strings.Title(strings.TrimSpace(strings.ToLower(rev.Tipo))), // Remove espaços e garante primeira letra maiúscula
 			rev.Expira,
 			rev.Sub,
 		)

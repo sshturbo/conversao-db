@@ -267,8 +267,8 @@ func ProcessarArquivoSQL(inputFile string) (*DatabaseExport, error) {
 		}
 		email := strings.TrimSpace(rev.Login) + "@gmail.com"
 
-		// Garantir que o tipo comece com letra maiúscula
-		modo := rev.Modo
+		// Garantir que o tipo comece com letra maiúscula e não tenha espaços extras
+		modo := strings.TrimSpace(rev.Modo)
 		if strings.ToLower(modo) == "validade" {
 			modo = "Validade"
 		} else if strings.ToLower(modo) == "credito" {
