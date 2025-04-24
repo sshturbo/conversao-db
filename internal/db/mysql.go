@@ -171,7 +171,14 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 
 	// Inserir revendas em accounts e atribuidos
 	for _, rev := range dbExport.Revendas {
-		byid := adminID                          // padrão: admin é o dono
+		// Buscar o dono pelo login usando o rev.Dono que já foi processado
+		byid := adminID // valor padrão
+		if rev.Dono != "admin" && rev.Dono != "desconhecido" {
+			if donoID, ok := loginToID[rev.Dono]; ok {
+				byid = donoID
+			}
+		}
+
 		mainid := int64(conversao.GerarMainID()) // Sempre gera um novo hash para cada revenda
 
 		result, err := db.Exec(`INSERT INTO accounts (nome, contato, email, login, senha, recuperar_senha, byid, mainid, accesstoken, valorrevenda, valorusuario, nivel) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 0, 0, 0, 2)`,
