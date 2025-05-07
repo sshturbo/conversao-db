@@ -13,6 +13,7 @@ import (
 
 	"conversao-db/internal/conversao"
 	"conversao-db/internal/db"
+	"conversao-db/internal/state"
 
 	_ "github.com/go-sql-driver/mysql"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -65,8 +66,11 @@ func (wq *WorkQueue) ProcessJobs(bot *tgbotapi.BotAPI, dsn string) {
 
 // processConversionJob processa um trabalho de conversão individual
 func processConversionJob(bot *tgbotapi.BotAPI, job ConversionJob, dsn string) {
+	// Obtém a escolha do usuário
+	dbChoice := state.GetUserDatabaseChoice(job.ChatID)
+
 	// Notifica início do processamento
-	bot.Send(tgbotapi.NewMessage(job.ChatID, "Iniciando processamento do seu arquivo..."))
+	bot.Send(tgbotapi.NewMessage(job.ChatID, fmt.Sprintf("Iniciando processamento do seu arquivo para o banco %s...", dbChoice)))
 
 	inputFile := job.FileName
 	if !strings.HasSuffix(inputFile, ".sql") {
@@ -79,15 +83,31 @@ func processConversionJob(bot *tgbotapi.BotAPI, job ConversionJob, dsn string) {
 		return
 	}
 
-	// Processar SQL e obter estrutura em memória
-	dbExport, err := conversao.ProcessarArquivoSQL(inputFile)
-	if err != nil {
-		bot.Send(tgbotapi.NewMessage(job.ChatID, "Erro ao processar o arquivo: "+err.Error()))
+	var dbExport interface{}
+	var errProcess error
+
+	switch dbChoice {
+	case state.Atlas:
+		// Processar no formato Atlas
+		dbExport, errProcess = conversao.ProcessarArquivoSQLFinal(inputFile)
+		if errProcess != nil {
+			bot.Send(tgbotapi.NewMessage(job.ChatID, "Erro ao processar o arquivo: "+errProcess.Error()))
+			return
+		}
+		err = db.EnviarParaMySQLFinal(dbExport.(*conversao.DatabaseFinal), dsn)
+	case state.Eclipse:
+		// Processar no formato Eclipse (original)
+		dbExport, errProcess = conversao.ProcessarArquivoSQL(inputFile)
+		if errProcess != nil {
+			bot.Send(tgbotapi.NewMessage(job.ChatID, "Erro ao processar o arquivo: "+errProcess.Error()))
+			return
+		}
+		err = db.EnviarParaMySQL(dbExport.(*conversao.DatabaseExport), dsn)
+	default:
+		bot.Send(tgbotapi.NewMessage(job.ChatID, "Erro: tipo de banco de dados não selecionado."))
 		return
 	}
 
-	// Enviar dados direto para MySQL
-	err = db.EnviarParaMySQL(dbExport, dsn)
 	if err != nil {
 		bot.Send(tgbotapi.NewMessage(job.ChatID, "Erro ao enviar para o MySQL: "+err.Error()))
 		return
@@ -112,13 +132,10 @@ func processConversionJob(bot *tgbotapi.BotAPI, job ConversionJob, dsn string) {
 		"--user="+dbUser,
 		"--password="+dbPass,
 		"--default-character-set=utf8mb4",
-		"--set-charset=utf8mb4",
-		"--skip-set-charset",
 		"--no-create-db",
 		dbName,
 		"--result-file="+backupFile,
-		"--single-transaction",
-		"--set-gtid-purged=OFF")
+		"--single-transaction")
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -230,69 +247,138 @@ var (
 	dbName string
 )
 
+func init() {
+	// Carrega o arquivo .env
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("Erro ao carregar arquivo .env")
+	}
+
+	// Carrega as variáveis de ambiente
+	dbHost = os.Getenv("DB_HOST")
+	dbPort = os.Getenv("DB_PORT")
+	dbUser = os.Getenv("DB_USER")
+	dbPass = os.Getenv("DB_PASS")
+	dbName = os.Getenv("DB_NAME")
+
+	// Verifica se todas as variáveis necessárias estão definidas
+	if dbHost == "" || dbPort == "" || dbUser == "" || dbPass == "" || dbName == "" {
+		log.Fatal("Variáveis de ambiente necessárias não encontradas no arquivo .env")
+	}
+}
+
 func main() {
-	// Verifica se já existe uma instância rodando
 	if !checkLock() {
-		log.Fatal("Outra instância do bot já está em execução")
+		log.Fatal("Uma instância do bot já está em execução")
 	}
 	defer removeLock()
 
-	// Carregar variáveis do .env
-	_ = godotenv.Load()
-
-	telegramToken := os.Getenv("TELEGRAM_TOKEN")
-	if telegramToken == "" {
-		log.Fatal("TELEGRAM_TOKEN não definido no .env")
+	// Carregar token do bot do arquivo .env
+	token := os.Getenv("BOT_TOKEN")
+	if token == "" {
+		log.Fatal("Token do bot não encontrado no arquivo .env")
 	}
 
-	bot, err := tgbotapi.NewBotAPI(telegramToken)
+	// Monta a string de conexão usando as variáveis de ambiente
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s", dbUser, dbPass, dbHost, dbPort, dbName)
+
+	// Inicializa o bot
+	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
-		log.Panic(err)
+		log.Fatal(err)
 	}
-	bot.Debug = false
-	log.Printf("Bot autorizado em %s", bot.Self.UserName)
 
-	dbUser = os.Getenv("DB_USER")
-	dbPass = os.Getenv("DB_PASS")
-	dbHost = os.Getenv("DB_HOST")
-	dbPort = os.Getenv("DB_PORT")
-	dbName = os.Getenv("DB_NAME")
-	if dbUser == "" || dbPass == "" || dbHost == "" || dbPort == "" || dbName == "" {
-		log.Fatal("Dados de conexão do banco não definidos no .env")
-	}
-	dsn := dbUser + ":" + dbPass + "@tcp(" + dbHost + ":" + dbPort + ")/" + dbName + "?charset=utf8mb4&collation=utf8mb4_unicode_ci&parseTime=True&loc=Local"
-
-	// Inicializar a fila de trabalhos
-	workQueue := NewWorkQueue(1) // 1 worker para processar um arquivo por vez
-	workQueue.ProcessJobs(bot, dsn)
+	log.Printf("Bot autorizado na conta %s", bot.Self.UserName)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
 	updates := bot.GetUpdatesChan(u)
 
-	for update := range updates {
-		if update.Message != nil && update.Message.Document != nil {
-			fileID := update.Message.Document.FileID
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Arquivo recebido! Adicionando à fila de conversão..."))
+	// Cria a fila de trabalho
+	workQueue := NewWorkQueue(1)
+	workQueue.ProcessJobs(bot, dsn)
 
-			file, err := bot.GetFile(tgbotapi.FileConfig{FileID: fileID})
-			if err != nil {
-				bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Erro ao baixar o arquivo."))
+	// Canal para processar um arquivo por vez
+	for update := range updates {
+		if update.Message == nil && update.CallbackQuery == nil {
+			continue
+		}
+
+		// Tratamento de callbacks (botões)
+		if update.CallbackQuery != nil {
+			callback := update.CallbackQuery
+			chatID := callback.Message.Chat.ID
+
+			switch callback.Data {
+			case "eclipse":
+				state.SetUserDatabaseChoice(chatID, state.Eclipse)
+				msg := "Você escolheu o banco Eclipse. Por favor, envie o arquivo SQL para conversão."
+				bot.Send(tgbotapi.NewMessage(chatID, msg))
+			case "atlas":
+				state.SetUserDatabaseChoice(chatID, state.Atlas)
+				msg := "Você escolheu o banco Atlas. Por favor, envie o arquivo SQL para conversão."
+				bot.Send(tgbotapi.NewMessage(chatID, msg))
+			}
+
+			// Responde ao callback
+			bot.Send(tgbotapi.NewCallback(callback.ID, ""))
+			continue
+		}
+
+		// Tratamento de mensagens
+		msg := update.Message
+		if msg == nil {
+			continue
+		}
+
+		// Comando /start
+		if msg.Command() == "start" {
+			// Limpa estado anterior do usuário
+			state.ClearUserState(msg.Chat.ID)
+
+			// Cria teclado inline com os botões
+			keyboard := tgbotapi.NewInlineKeyboardMarkup(
+				tgbotapi.NewInlineKeyboardRow(
+					tgbotapi.NewInlineKeyboardButtonData("Eclipse", "eclipse"),
+					tgbotapi.NewInlineKeyboardButtonData("Atlas", "atlas"),
+				),
+			)
+
+			reply := tgbotapi.NewMessage(msg.Chat.ID,
+				"Bem-vindo ao Conversor de Banco de Dados!\n\n"+
+					"Por favor, escolha o formato do banco de dados:")
+			reply.ReplyMarkup = keyboard
+			bot.Send(reply)
+			continue
+		}
+
+		// Verifica se é um arquivo
+		if msg.Document != nil {
+			// Verifica se o usuário já escolheu o tipo de banco
+			if state.GetUserDatabaseChoice(msg.Chat.ID) == "" {
+				bot.Send(tgbotapi.NewMessage(msg.Chat.ID,
+					"Por favor, use o comando /start primeiro para escolher o tipo de banco de dados."))
 				continue
 			}
 
-			// Criar um novo trabalho e adicionar à fila
-			job := ConversionJob{
-				ChatID:      update.Message.Chat.ID,
-				FileID:      fileID,
-				FileName:    update.Message.Document.FileName,
-				DownloadURL: file.Link(bot.Token),
-			}
-			workQueue.AddJob(job)
+			// Obtém informações do arquivo
+			fileID := msg.Document.FileID
+			fileName := msg.Document.FileName
 
-		} else if update.Message != nil {
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Envie um arquivo .sql para conversão."))
+			// Obtém URL do arquivo
+			file, err := bot.GetFile(tgbotapi.FileConfig{FileID: fileID})
+			if err != nil {
+				bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "Erro ao obter o arquivo."))
+				continue
+			}
+
+			// Adiciona trabalho à fila
+			workQueue.AddJob(ConversionJob{
+				ChatID:      msg.Chat.ID,
+				FileID:      fileID,
+				FileName:    fileName,
+				DownloadURL: file.Link(token),
+			})
 		}
 	}
 }

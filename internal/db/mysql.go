@@ -8,6 +8,8 @@ import (
 	"conversao-db/internal/conversao"
 
 	_ "github.com/go-sql-driver/mysql"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // OpenDB abre a conexão com o banco de dados MySQL
@@ -209,7 +211,7 @@ func EnviarParaMySQL(dbExport *conversao.DatabaseExport, dsn string) error {
 			byid,
 			rev.Limite,
 			rev.Limite,
-			strings.TrimSpace(strings.Title(strings.ToLower(rev.Tipo))), // Remove espaços e garante primeira letra maiúscula
+			cases.Title(language.Und, cases.NoLower).String(strings.TrimSpace(strings.ToLower(rev.Tipo))),
 			strings.TrimSpace(rev.Expira),
 			rev.Sub,
 		)
