@@ -31,8 +31,8 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 	// Inserir accounts
 	for _, acc := range dbFinal.Accounts {
 		_, err := db.Exec(`INSERT INTO accounts (
-			id, nome, contato, email, login, senha, byid, mainid, accesstoken, valorusuario, valorrevenda, nivel
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, nome, contato, email, login, senha, byid, mainid, nivel
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			acc.ID,
 			strings.TrimSpace(acc.Nome),
 			strings.TrimSpace(acc.Contato),
@@ -41,9 +41,6 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 			strings.TrimSpace(acc.Senha),
 			strings.TrimSpace(acc.ByID),
 			strings.TrimSpace(acc.MainID),
-			strings.TrimSpace(acc.AccessToken),
-			strings.TrimSpace(acc.ValorUsuario),
-			strings.TrimSpace(acc.ValorRevenda),
 			acc.Nivel,
 		)
 		if err != nil {
