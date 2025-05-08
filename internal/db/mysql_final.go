@@ -31,11 +31,12 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 	// Inserir accounts
 	for _, acc := range dbFinal.Accounts {
 		_, err := db.Exec(`INSERT INTO accounts (
-			id, nome, contato, login, senha, byid, mainid, accesstoken, valorusuario, valorrevenda
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, nome, contato, email, login, senha, byid, mainid, accesstoken, valorusuario, valorrevenda, nivel
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			acc.ID,
 			strings.TrimSpace(acc.Nome),
 			strings.TrimSpace(acc.Contato),
+			strings.TrimSpace(acc.Email),
 			strings.TrimSpace(acc.Login),
 			strings.TrimSpace(acc.Senha),
 			strings.TrimSpace(acc.ByID),
@@ -43,6 +44,7 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 			strings.TrimSpace(acc.AccessToken),
 			strings.TrimSpace(acc.ValorUsuario),
 			strings.TrimSpace(acc.ValorRevenda),
+			acc.Nivel,
 		)
 		if err != nil {
 			return fmt.Errorf("erro ao inserir account %s: %v", acc.Login, err)
@@ -52,18 +54,20 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 	// Inserir ssh_accounts
 	for _, ssh := range dbFinal.SSHAccounts {
 		_, err := db.Exec(`INSERT INTO ssh_accounts (
-			id, byid, categoriaid, limite, login, senha, mainid, expira, status, uuid
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, byid, categoriaid, limite, login, nome, senha, mainid, expira, uuid, contato, tipo
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			ssh.ID,
 			ssh.ByID,
 			ssh.CategoriaID,
 			ssh.Limite,
 			strings.TrimSpace(ssh.Login),
+			strings.TrimSpace(ssh.Nome),
 			strings.TrimSpace(ssh.Senha),
 			strings.TrimSpace(ssh.MainID),
 			strings.TrimSpace(ssh.Expira),
-			strings.TrimSpace(ssh.Status),
 			strings.TrimSpace(ssh.UUID),
+			strings.TrimSpace(ssh.Contato),
+			strings.TrimSpace(ssh.Tipo),
 		)
 		if err != nil {
 			return fmt.Errorf("erro ao inserir ssh_account %s: %v", ssh.Login, err)

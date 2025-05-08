@@ -19,6 +19,7 @@ type AccountFinal struct {
 	ID            int    `json:"id"`
 	Nome          string `json:"nome"`
 	Contato       string `json:"contato"`
+	Email         string `json:"email"`
 	Login         string `json:"login"`
 	Token         string `json:"token"`
 	MB            string `json:"mb"`
@@ -34,6 +35,7 @@ type AccountFinal struct {
 	TokenPagHiper string `json:"tokenpaghiper"`
 	FormaDePag    string `json:"formadepag"`
 	WhatsApp      string `json:"whatsapp"`
+	Nivel         int    `json:"nivel"`
 }
 
 type SSHAccountFinal struct {
@@ -43,6 +45,7 @@ type SSHAccountFinal struct {
 	Limite      int    `json:"limite"`
 	ByCredit    int    `json:"bycredit"`
 	Login       string `json:"login"`
+	Nome        string `json:"nome"`
 	Senha       string `json:"senha"`
 	MainID      string `json:"mainid"`
 	Expira      string `json:"expira"`
@@ -54,6 +57,8 @@ type SSHAccountFinal struct {
 	UUID        string `json:"uuid"`
 	DeviceID    string `json:"deviceid"`
 	DeviceAtivo string `json:"deviceativo"`
+	Contato     string `json:"contato"`
+	Tipo        string `json:"tipo"`
 }
 
 type AtribuidoFinal struct {
@@ -67,9 +72,10 @@ type AtribuidoFinal struct {
 	Tipo        string `json:"tipo"`
 	Expira      string `json:"expira"`
 	SubRev      int    `json:"subrev"`
-	Suspenso    int    `json:"suspenso"`
+	Suspenso    *int   `json:"suspenso"`
 	ValorMensal string `json:"valormensal"`
 	Notificado  string `json:"notificado"`
+	SusID       *int   `json:"susid"`
 }
 
 type CategoriaFinal struct {
@@ -165,6 +171,31 @@ func ProcessarArquivoSQLFinal(inputFile string) (*DatabaseFinal, error) {
 		}
 	}
 
+	// --- AJUSTE MAINID DOS ACCOUNTS (exceto admin) ---
+	mainidMap := make(map[int]string)
+	for i, acc := range db.Accounts {
+		if acc.ID == 1 {
+			db.Accounts[i].MainID = "0"
+			mainidMap[acc.ID] = "0"
+		} else {
+			if acc.MainID == "" || acc.MainID == "0" {
+				mainid := fmt.Sprintf("%d", GerarMainID())
+				db.Accounts[i].MainID = mainid
+				mainidMap[acc.ID] = mainid
+			} else {
+				mainidMap[acc.ID] = acc.MainID
+			}
+		}
+	}
+	// --- AJUSTE MAINID DOS SSH_ACCOUNTS ---
+	for i, ssh := range db.SSHAccounts {
+		mainid := mainidMap[ssh.ByID]
+		if mainid == "" {
+			mainid = "0"
+		}
+		db.SSHAccounts[i].MainID = mainid
+	}
+
 	return db, nil
 }
 
@@ -214,6 +245,29 @@ func parseAccountFinal(fields []string) AccountFinal {
 	acc.TokenPagHiper = strings.TrimSpace(fields[15])
 	acc.FormaDePag = strings.TrimSpace(fields[16])
 	acc.WhatsApp = strings.TrimSpace(fields[17])
+
+	// Nome: se vazio, usar login
+	if acc.Nome == "" {
+		acc.Nome = acc.Login
+	}
+	// Email: <login>@gmail.com
+	acc.Email = acc.Login + "@gmail.com"
+	// Contato: se vazio, usar número exemplo
+	if acc.Contato == "" {
+		acc.Contato = "62999999999"
+	}
+	// MainID: aleatório, exceto se id==1
+	if acc.ID == 1 {
+		acc.MainID = "0"
+	} else {
+		acc.MainID = fmt.Sprintf("%d", GerarMainID())
+	}
+	// Nivel: 3 se id==1, senão 2
+	if acc.ID == 1 {
+		acc.Nivel = 3
+	} else {
+		acc.Nivel = 2
+	}
 	return acc
 }
 
@@ -246,6 +300,8 @@ func parseSSHAccountFinal(fields []string) SSHAccountFinal {
 	if len(fields) > 5 {
 		ssh.Login = strings.TrimSpace(fields[5])
 	}
+	// Nome: sempre igual ao login
+	ssh.Nome = ssh.Login
 	if len(fields) > 6 {
 		ssh.Senha = strings.TrimSpace(fields[6])
 	}
@@ -280,11 +336,12 @@ func parseSSHAccountFinal(fields []string) SSHAccountFinal {
 		ssh.DeviceAtivo = strings.TrimSpace(fields[16])
 	}
 
-	// Valores padrão para campos vazios
-	if ssh.Notificado == "" {
-		ssh.Notificado = "nao"
-	}
-	if ssh.Status == "" {
+	// Contato: número de exemplo
+	ssh.Contato = "62999999999"
+	// Tipo: sempre 'xray'
+	ssh.Tipo = "xray"
+	// Status: se vazio ou zero, definir como '1'
+	if ssh.Status == "" || ssh.Status == "0" {
 		ssh.Status = "1"
 	}
 	if ssh.MainID == "" {
@@ -315,7 +372,15 @@ func parseAtribuidoFinal(fields []string) AtribuidoFinal {
 		fmt.Sscanf(fields[9], "%d", &atr.SubRev)
 	}
 	if len(fields) > 10 {
-		fmt.Sscanf(fields[10], "%d", &atr.Suspenso)
+		var suspenso int
+		fmt.Sscanf(fields[10], "%d", &suspenso)
+		if suspenso == 0 {
+			atr.Suspenso = nil
+		} else {
+			atr.Suspenso = &suspenso
+		}
+	} else {
+		atr.Suspenso = nil
 	}
 	if len(fields) > 11 {
 		atr.ValorMensal = strings.TrimSpace(fields[11])
@@ -323,6 +388,8 @@ func parseAtribuidoFinal(fields []string) AtribuidoFinal {
 	if len(fields) > 12 {
 		atr.Notificado = strings.TrimSpace(fields[12])
 	}
+	// SusID sempre nulo
+	atr.SusID = nil
 	return atr
 }
 
