@@ -111,48 +111,49 @@ func ProcessarArquivoSQLFinal(inputFile string) (*DatabaseFinal, error) {
 			continue
 		}
 
-		if strings.Contains(line, "INSERT INTO `accounts`") || strings.HasPrefix(line, "INSERT INTO accounts VALUES") {
+		// Accounts
+		if strings.HasPrefix(line, "INSERT INTO `accounts`") || strings.HasPrefix(line, "INSERT INTO accounts") {
 			inInsert = true
 			currentTable = "accounts"
 			values = ""
 			if idx := strings.Index(line, "VALUES"); idx != -1 {
-				values = line[idx:]
+				values = line[idx+6:] // Pega só o trecho após VALUES
 				if strings.HasSuffix(values, ";") {
 					values = strings.TrimSuffix(values, ";")
 					processValues(values, currentTable, db)
 					inInsert = false
 				}
 			}
-		} else if strings.Contains(line, "INSERT INTO `ssh_accounts`") || strings.HasPrefix(line, "INSERT INTO ssh_accounts VALUES") {
+		} else if strings.HasPrefix(line, "INSERT INTO `ssh_accounts`") || strings.HasPrefix(line, "INSERT INTO ssh_accounts") {
 			inInsert = true
 			currentTable = "ssh_accounts"
 			values = ""
 			if idx := strings.Index(line, "VALUES"); idx != -1 {
-				values = line[idx:]
+				values = line[idx+6:]
 				if strings.HasSuffix(values, ";") {
 					values = strings.TrimSuffix(values, ";")
 					processValues(values, currentTable, db)
 					inInsert = false
 				}
 			}
-		} else if strings.Contains(line, "INSERT INTO `atribuidos`") || strings.HasPrefix(line, "INSERT INTO atribuidos VALUES") {
+		} else if strings.HasPrefix(line, "INSERT INTO `atribuidos`") || strings.HasPrefix(line, "INSERT INTO atribuidos") {
 			inInsert = true
 			currentTable = "atribuidos"
 			values = ""
 			if idx := strings.Index(line, "VALUES"); idx != -1 {
-				values = line[idx:]
+				values = line[idx+6:]
 				if strings.HasSuffix(values, ";") {
 					values = strings.TrimSuffix(values, ";")
 					processValues(values, currentTable, db)
 					inInsert = false
 				}
 			}
-		} else if strings.Contains(line, "INSERT INTO `categorias`") || strings.HasPrefix(line, "INSERT INTO categorias VALUES") {
+		} else if strings.HasPrefix(line, "INSERT INTO `categorias`") || strings.HasPrefix(line, "INSERT INTO categorias") {
 			inInsert = true
 			currentTable = "categorias"
 			values = ""
 			if idx := strings.Index(line, "VALUES"); idx != -1 {
-				values = line[idx:]
+				values = line[idx+6:]
 				if strings.HasSuffix(values, ";") {
 					values = strings.TrimSuffix(values, ";")
 					processValues(values, currentTable, db)
@@ -202,11 +203,28 @@ func ProcessarArquivoSQLFinal(inputFile string) (*DatabaseFinal, error) {
 func processValues(values string, table string, db *DatabaseFinal) {
 	values = strings.TrimPrefix(values, "VALUES")
 	values = strings.TrimSpace(values)
-	rows := strings.Split(values, "),(")
+
+	// Garante que começa exatamente no primeiro '('
+	idx := strings.Index(values, "(")
+	if idx != -1 {
+		values = values[idx:]
+	}
+
+	// Remove possível vírgula final
+	values = strings.TrimSuffix(values, ";")
+
+	// Divide os registros corretamente
+	rows := splitInsertRows(values)
 
 	for _, row := range rows {
-		row = strings.Trim(row, "()")
-		fields := splitFields(row)
+		row = strings.Trim(row, "() ")
+		fields := splitFieldsFinal(row)
+		if len(fields) == 0 {
+			continue
+		}
+		if isHeaderRow(fields) {
+			continue
+		}
 
 		switch table {
 		case "accounts":
@@ -223,6 +241,100 @@ func processValues(values string, table string, db *DatabaseFinal) {
 			db.Categorias = append(db.Categorias, cat)
 		}
 	}
+}
+
+// Função robusta para dividir os registros do insert
+func splitInsertRows(values string) []string {
+	var rows []string
+	var buf strings.Builder
+	open := 0
+	for i := 0; i < len(values); i++ {
+		c := values[i]
+		if c == '(' {
+			if open == 0 && buf.Len() > 0 {
+				buf.Reset()
+			}
+			open++
+		}
+		if open > 0 {
+			buf.WriteByte(c)
+		}
+		if c == ')' {
+			open--
+			if open == 0 {
+				rows = append(rows, buf.String())
+				buf.Reset()
+			}
+		}
+	}
+	return rows
+}
+
+// Função auxiliar para detectar se a linha é header de nomes de colunas
+func isHeaderRow(fields []string) bool {
+	colunasPossiveis := map[string]bool{
+		"id": true, "nome": true, "contato": true, "email": true, "login": true, "token": true, "mb": true, "senha": true,
+		"byid": true, "mainid": true, "accesstoken": true, "valorusuario": true, "valorrevenda": true,
+		"idtelegram": true, "tempo": true, "tokenvenda": true, "acesstokenpaghiper": true, "formadepag": true,
+		"tokenpaghiper": true, "whatsapp": true, "categoriaid": true, "userid": true, "limite": true,
+		"limitetest": true, "tipo": true, "expira": true, "subrev": true, "suspenso": true, "valormensal": true,
+		"notificado": true, "susid": true, "subid": true,
+	}
+	count := 0
+	for _, f := range fields {
+		nome := strings.ToLower(strings.Trim(f, " `'\""))
+		// Se o campo for só letras e for uma coluna possível, conta
+		if colunasPossiveis[nome] {
+			count++
+		}
+		// Se o campo for só letras/crases/aspas, provavelmente é header
+		if len(nome) > 0 && isOnlyLetters(nome) && colunasPossiveis[nome] {
+			count++
+		}
+	}
+	// Se a maioria dos campos são nomes de colunas, é header
+	return count > len(fields)/2 && len(fields) > 0
+}
+
+// Função auxiliar para verificar se a string contém apenas letras
+func isOnlyLetters(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+// Função auxiliar para dividir os campos de uma linha SQL considerando aspas
+func splitFieldsFinal(row string) []string {
+	var fields []string
+	var field string
+	inQuote := false
+	quoteChar := byte(0)
+
+	for i := 0; i < len(row); i++ {
+		char := row[i]
+		if (char == '\'' || char == '"') && !inQuote {
+			inQuote = true
+			quoteChar = char
+			continue
+		}
+		if inQuote && char == quoteChar {
+			inQuote = false
+			continue
+		}
+		if char == ',' && !inQuote {
+			fields = append(fields, field)
+			field = ""
+		} else {
+			field += string(char)
+		}
+	}
+	if field != "" {
+		fields = append(fields, field)
+	}
+	return fields
 }
 
 func parseAccountFinal(fields []string) AccountFinal {
@@ -246,16 +358,16 @@ func parseAccountFinal(fields []string) AccountFinal {
 	acc.FormaDePag = strings.TrimSpace(fields[16])
 	acc.WhatsApp = strings.TrimSpace(fields[17])
 
-	// Nome: se vazio, usar login
-	if acc.Nome == "" {
+	// Nome: se vazio ou 'NULL', usar login
+	if acc.Nome == "" || strings.ToUpper(acc.Nome) == "NULL" {
 		acc.Nome = acc.Login
+	}
+	// Contato: se vazio ou 'NULL', usar número exemplo
+	if acc.Contato == "" || strings.ToUpper(acc.Contato) == "NULL" {
+		acc.Contato = "62999999999"
 	}
 	// Email: <login>@gmail.com
 	acc.Email = acc.Login + "@gmail.com"
-	// Contato: se vazio, usar número exemplo
-	if acc.Contato == "" {
-		acc.Contato = "62999999999"
-	}
 	// MainID: aleatório, exceto se id==1
 	if acc.ID == 1 {
 		acc.MainID = "0"
