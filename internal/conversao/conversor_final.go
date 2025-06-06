@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // DatabaseFinal representa a estrutura dos dados no formato final
@@ -339,6 +340,10 @@ func splitFieldsFinal(row string) []string {
 
 func parseAccountFinal(fields []string) AccountFinal {
 	var acc AccountFinal
+	if len(fields) < 18 {
+		fmt.Printf("[parseAccountFinal] ERRO: esperado pelo menos 18 campos, recebido %d: %#v\n", len(fields), fields)
+		return acc // retorna struct zerada para evitar panic
+	}
 	fmt.Sscanf(fields[0], "%d", &acc.ID)
 	acc.Nome = strings.TrimSpace(fields[1])
 	acc.Contato = strings.TrimSpace(fields[2])
@@ -347,7 +352,13 @@ func parseAccountFinal(fields []string) AccountFinal {
 	acc.MB = strings.TrimSpace(fields[5])
 	acc.Senha = strings.TrimSpace(fields[6])
 	acc.ByID = strings.TrimSpace(fields[7])
+	if acc.ByID == "" {
+		acc.ByID = "1"
+	}
 	acc.MainID = strings.TrimSpace(fields[8])
+	if acc.MainID == "" {
+		acc.MainID = "1"
+	}
 	acc.AccessToken = strings.TrimSpace(fields[9])
 	acc.ValorUsuario = strings.TrimSpace(fields[10])
 	acc.ValorRevenda = strings.TrimSpace(fields[11])
@@ -381,6 +392,14 @@ func parseAccountFinal(fields []string) AccountFinal {
 		acc.Nivel = 2
 	}
 	return acc
+}
+
+func validarDataMySQL(data string) string {
+	t, err := time.Parse("2006-01-02 15:04:05", data)
+	if err != nil || t.Year() < 2000 || t.Year() > 2100 {
+		return "2000-01-01 00:00:00"
+	}
+	return data
 }
 
 func parseSSHAccountFinal(fields []string) SSHAccountFinal {
@@ -421,7 +440,7 @@ func parseSSHAccountFinal(fields []string) SSHAccountFinal {
 		ssh.MainID = strings.TrimSpace(fields[7])
 	}
 	if len(fields) > 8 {
-		ssh.Expira = strings.TrimSpace(fields[8])
+		ssh.Expira = validarDataMySQL(strings.TrimSpace(fields[8]))
 	}
 	if len(fields) > 9 {
 		ssh.LastView = strings.TrimSpace(fields[9])

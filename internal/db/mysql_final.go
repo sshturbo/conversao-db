@@ -4,12 +4,41 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"conversao-db/internal/conversao"
 )
 
+// LimparTabelasFinal limpa todas as tabelas do banco de dados final
+func LimparTabelasFinal(dsn string) error {
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return fmt.Errorf("erro ao conectar ao banco de dados: %v", err)
+	}
+	defer db.Close()
+
+	// Lista de tabelas para limpar
+	tabelas := []string{"categorias", "accounts", "ssh_accounts", "atribuidos"}
+
+	// Limpa cada tabela
+	for _, tabela := range tabelas {
+		_, err := db.Exec(fmt.Sprintf("DELETE FROM %s", tabela))
+		if err != nil {
+			return fmt.Errorf("erro ao limpar tabela %s: %v", tabela, err)
+		}
+	}
+
+	return nil
+}
+
 // EnviarParaMySQLFinal insere os dados no formato final para o MySQL
 func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
+	// Limpa as tabelas antes de inserir os novos dados
+	err := LimparTabelasFinal(dsn)
+	if err != nil {
+		return fmt.Errorf("erro ao limpar tabelas: %v", err)
+	}
+
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		return fmt.Errorf("erro ao conectar ao banco de dados: %v", err)
@@ -72,6 +101,12 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 
 	// Inserir atribuidos
 	for _, atr := range dbFinal.Atribuidos {
+		// Se a data de expiração estiver vazia ou NULL, usa a data atual
+		expira := strings.TrimSpace(atr.Expira)
+		if expira == "" || strings.EqualFold(expira, "NULL") {
+			expira = time.Now().Format("2006-01-02 15:04:05")
+		}
+
 		_, err := db.Exec(`INSERT INTO atribuidos (
 			id, valor, categoriaid, userid, byid,
 			limite, limitetest, tipo, expira, subrev,
@@ -85,7 +120,7 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 			atr.Limite,
 			atr.LimiteTest,
 			strings.TrimSpace(atr.Tipo),
-			strings.TrimSpace(atr.Expira),
+			expira,
 			atr.SubRev,
 			atr.Suspenso,
 		)
