@@ -79,8 +79,11 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 	// Inserir ssh_accounts
 	for _, ssh := range dbFinal.SSHAccounts {
 		expira := strings.TrimSpace(ssh.Expira)
+		var expiraPtr interface{}
 		if expira == "" || expira == "0000-00-00 00:00:00" || strings.EqualFold(expira, "NULL") {
-			expira = sql.NullString{}.String // ou use nil se preferir
+			expiraPtr = nil
+		} else {
+			expiraPtr = expira
 		}
 		_, err := db.Exec(`INSERT INTO ssh_accounts (
 			id, byid, categoriaid, limite, login, nome, senha, mainid, expira, uuid, contato
@@ -93,7 +96,7 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 			strings.TrimSpace(ssh.Nome),
 			strings.TrimSpace(ssh.Senha),
 			strings.TrimSpace(ssh.MainID),
-			expira,
+			expiraPtr,
 			strings.TrimSpace(ssh.UUID),
 			strings.TrimSpace(ssh.Contato),
 		)
@@ -105,8 +108,11 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 	// Inserir atribuidos
 	for _, atr := range dbFinal.Atribuidos {
 		expira := strings.TrimSpace(atr.Expira)
+		var expiraPtr interface{}
 		if expira == "" || expira == "0000-00-00 00:00:00" || strings.EqualFold(expira, "NULL") {
-			expira = sql.NullString{}.String // ou use nil se preferir
+			expiraPtr = nil
+		} else {
+			expiraPtr = expira
 		}
 		_, err := db.Exec(`INSERT INTO atribuidos (
 			id, valor, categoriaid, userid, byid,
@@ -121,7 +127,7 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 			atr.Limite,
 			atr.LimiteTest,
 			strings.TrimSpace(atr.Tipo),
-			expira,
+			expiraPtr,
 			atr.SubRev,
 			atr.Suspenso,
 		)
