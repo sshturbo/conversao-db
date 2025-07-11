@@ -200,13 +200,14 @@ func ProcessarArquivoSQL(inputFile string) (*DatabaseExport, error) {
 				for _, row := range rows {
 					row = strings.Trim(row, "()")
 					fields := splitFields(row)
-					if currentTable == "categorias" {
+					switch currentTable {
+					case "categorias":
 						cat := parseCategoria(fields)
 						db.Categorias = append(db.Categorias, cat)
-					} else if currentTable == "revenda" {
+					case "revenda":
 						rev := parseRevenda(fields)
 						db.Revendas = append(db.Revendas, rev)
-					} else if currentTable == "usuarios" {
+					case "usuarios":
 						user := parseUsuario(fields)
 						db.Usuarios = append(db.Usuarios, user)
 					}

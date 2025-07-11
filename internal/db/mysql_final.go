@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"conversao-db/internal/conversao"
 )
@@ -79,6 +78,10 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 
 	// Inserir ssh_accounts
 	for _, ssh := range dbFinal.SSHAccounts {
+		expira := strings.TrimSpace(ssh.Expira)
+		if expira == "" || expira == "0000-00-00 00:00:00" || strings.EqualFold(expira, "NULL") {
+			expira = sql.NullString{}.String // ou use nil se preferir
+		}
 		_, err := db.Exec(`INSERT INTO ssh_accounts (
 			id, byid, categoriaid, limite, login, nome, senha, mainid, expira, uuid, contato
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -90,7 +93,7 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 			strings.TrimSpace(ssh.Nome),
 			strings.TrimSpace(ssh.Senha),
 			strings.TrimSpace(ssh.MainID),
-			strings.TrimSpace(ssh.Expira),
+			expira,
 			strings.TrimSpace(ssh.UUID),
 			strings.TrimSpace(ssh.Contato),
 		)
@@ -101,12 +104,10 @@ func EnviarParaMySQLFinal(dbFinal *conversao.DatabaseFinal, dsn string) error {
 
 	// Inserir atribuidos
 	for _, atr := range dbFinal.Atribuidos {
-		// Se a data de expiração estiver vazia ou NULL, usa a data atual
 		expira := strings.TrimSpace(atr.Expira)
-		if expira == "" || strings.EqualFold(expira, "NULL") {
-			expira = time.Now().Format("2006-01-02 15:04:05")
+		if expira == "" || expira == "0000-00-00 00:00:00" || strings.EqualFold(expira, "NULL") {
+			expira = sql.NullString{}.String // ou use nil se preferir
 		}
-
 		_, err := db.Exec(`INSERT INTO atribuidos (
 			id, valor, categoriaid, userid, byid,
 			limite, limitetest, tipo, expira, subrev,
